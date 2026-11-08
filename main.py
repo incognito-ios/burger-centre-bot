@@ -5,10 +5,13 @@ import requests
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 CATEGORIES = {
@@ -23,7 +26,7 @@ CATEGORIES = {
         ]
     },
     "phone": {
-        "name": "📞 Phone & Email Lookup",
+        "name": "📞 Phone & Email",
         "links": [
             ("Phone Validator", "https://www.numverify.com/"),
             ("Phone Search", "https://www.google.com/search?q=phone+number+lookup"),
@@ -42,16 +45,15 @@ CATEGORIES = {
         ]
     },
     "social": {
-        "name": "📱 Social Media Search",
+        "name": "📱 Social Media",
         "links": [
             ("Social Searcher", "https://www.social-searcher.com/"),
-            ("Google Social Search", "https://www.google.com/search?q=social+media+profiles"),
             ("Namechk", "https://namechk.com/"),
             ("WhatsMyName", "https://whatsmyname.app/")
         ]
     },
     "images": {
-        "name": "🖼 Image & Reverse Search",
+        "name": "🖼 Image Search",
         "links": [
             ("Google Lens", "https://lens.google.com/"),
             ("TinEye", "https://tineye.com/"),
@@ -60,7 +62,7 @@ CATEGORIES = {
         ]
     },
     "maps": {
-        "name": "📍 Maps & Location Tools",
+        "name": "📍 Maps & Locations",
         "links": [
             ("Google Maps", "https://maps.google.com/"),
             ("OpenStreetMap", "https://www.openstreetmap.org/"),
@@ -98,7 +100,7 @@ CATEGORIES = {
     "tools": {
         "name": "🛠 Online Tools",
         "links": [
-            ("Whois Lookup", "https://lookup.icann.org/"),
+            ("ICANN Lookup", "https://lookup.icann.org/"),
             ("URL Scanner", "https://urlscan.io/"),
             ("VirusTotal", "https://www.virustotal.com/"),
             ("Wayback Machine", "https://web.archive.org/")
@@ -108,7 +110,7 @@ CATEGORIES = {
         "name": "🔐 Privacy & Security",
         "links": [
             ("Privacy Guides", "https://www.privacyguides.org/"),
-            ("EFF", "https://www.eff.org/"),
+            ("Electronic Frontier Foundation", "https://www.eff.org/"),
             ("Have I Been Pwned", "https://haveibeenpwned.com/"),
             ("Mozilla Monitor", "https://monitor.mozilla.org/")
         ]
@@ -124,28 +126,58 @@ CATEGORIES = {
 }
 
 
+def telegram(method, payload):
+    if not BOT_TOKEN:
+        logger.error("BOT_TOKEN is missing.")
+        return None
+
+    try:
+        response = requests.post(
+            f"{BASE_URL}/{method}",
+            json=payload,
+            timeout=15
+        )
+        result = response.json()
+
+        if not result.get("ok"):
+            logger.error("Telegram API error: %s", result)
+
+        return result
+
+    except requests.RequestException:
+        logger.exception("Telegram request failed.")
+        return None
+
+
 def send_message(chat_id, text, keyboard=None):
-    payload = {"chat_id": chat_id, "text": text}
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+
     if keyboard:
-        payload["reply_markup"] = {"inline_keyboard": keyboard}
-    return requests.post(
-        f"{BASE_URL}/sendMessage",
-        json=payload,
-        timeout=15
-    )
+        payload["reply_markup"] = {
+            "inline_keyboard": keyboard
+        }
+
+    return telegram("sendMessage", payload)
 
 
 def edit_message(chat_id, message_id, text, keyboard):
-    return requests.post(
-        f"{BASE_URL}/editMessageText",
-        json={
-            "chat_id": chat_id,
-            "message_id": message_id,
-            "text": text,
-            "reply_markup": {"inline_keyboard": keyboard}
-        },
-        timeout=15
-    )
+    return telegram("editMessageText", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+        "text": text,
+        "reply_markup": {
+            "inline_keyboard": keyboard
+        }
+    })
+
+
+def answer_callback(callback_id):
+    telegram("answerCallbackQuery", {
+        "callback_query_id": callback_id
+    })
 
 
 def main_menu():
@@ -154,17 +186,25 @@ def main_menu():
 
     for i in range(0, len(items), 2):
         row = []
+
         for key, category in items[i:i + 2]:
             row.append({
                 "text": category["name"],
                 "callback_data": f"category:{key}"
             })
+
         buttons.append(row)
 
-    buttons.append([{
-        "text": "ℹ️ About Burger Centre",
-        "callback_data": "about"
-    }])
+    buttons.append([
+        {
+            "text": "ℹ️ About",
+            "callback_data": "about"
+        },
+        {
+            "text": "❓ Help",
+            "callback_data": "help"
+        }
+    ])
 
     return buttons
 
@@ -174,22 +214,128 @@ def category_menu(key):
     buttons = []
 
     for label, url in category["links"]:
-        buttons.append([{"text": f"🔗 {label}", "url": url}])
+        buttons.append([
+            {
+                "text": f"🔗 {label}",
+                "url": url
+            }
+        ])
 
-    buttons.append([{
-        "text": "⬅️ Back to Main Menu",
-        "callback_data": "home"
-    }])
+    buttons.append([
+        {
+            "text": "⬅️ Back to Main Menu",
+            "callback_data": "home"
+        }
+    ])
 
     return buttons
 
 
-def answer_callback(callback_id):
-    requests.post(
-        f"{BASE_URL}/answerCallbackQuery",
-        json={"callback_query_id": callback_id},
-        timeout=10
+def welcome_text():
+    return (
+        "🍔 BURGER CENTRE\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        "Your central resource directory.\n\n"
+        "Explore organized collections of "
+        "search engines, public resources, "
+        "business directories, research tools "
+        "and educational references.\n\n"
+        "Select a category below to get started.\n\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "BURGER CENTRE © 2026"
     )
+
+
+def handle_command(message):
+    chat_id = message["chat"]["id"]
+    text = message.get("text", "").strip()
+
+    command = text.split()[0].split("@")[0] if text else ""
+
+    if command in ["/start", "/menu"]:
+        send_message(
+            chat_id,
+            welcome_text(),
+            main_menu()
+        )
+
+    elif command == "/help":
+        send_message(
+            chat_id,
+            "🍔 BURGER CENTRE HELP\n\n"
+            "/start — Open the welcome menu\n"
+            "/menu — Open the resource directory\n"
+            "/help — Display these instructions\n\n"
+            "Select a category to explore its resources."
+        )
+
+
+def handle_callback(callback):
+    answer_callback(callback["id"])
+
+    data = callback.get("data", "")
+    message = callback.get("message", {})
+
+    chat_id = message.get("chat", {}).get("id")
+    message_id = message.get("message_id")
+
+    if not chat_id or not message_id:
+        return
+
+    if data == "home":
+        edit_message(
+            chat_id,
+            message_id,
+            welcome_text(),
+            main_menu()
+        )
+
+    elif data == "about":
+        edit_message(
+            chat_id,
+            message_id,
+            "🍔 ABOUT BURGER CENTRE\n"
+            "━━━━━━━━━━━━━━━━━━\n\n"
+            "Burger Centre is an organized "
+            "directory of useful online resources, "
+            "public information, search platforms, "
+            "research tools and educational websites.\n\n"
+            "Use resources responsibly and respect "
+            "privacy and applicable laws.",
+            [[{
+                "text": "⬅️ Back to Main Menu",
+                "callback_data": "home"
+            }]]
+        )
+
+    elif data == "help":
+        edit_message(
+            chat_id,
+            message_id,
+            "❓ HOW TO USE BURGER CENTRE\n\n"
+            "1. Select a category.\n"
+            "2. Browse the available resources.\n"
+            "3. Tap a link to open its website.\n"
+            "4. Return to the main menu whenever needed.",
+            [[{
+                "text": "⬅️ Back to Main Menu",
+                "callback_data": "home"
+            }]]
+        )
+
+    elif data.startswith("category:"):
+        key = data.split(":", 1)[1]
+
+        if key in CATEGORIES:
+            edit_message(
+                chat_id,
+                message_id,
+                "🍔 BURGER CENTRE\n"
+                "━━━━━━━━━━━━━━━━━━\n\n"
+                f"{CATEGORIES[key]['name']}\n\n"
+                "Select a resource below:",
+                category_menu(key)
+            )
 
 
 @app.route("/")
@@ -199,88 +345,35 @@ def home():
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
+
     if WEBHOOK_SECRET:
         supplied = request.headers.get(
             "X-Telegram-Bot-Api-Secret-Token", ""
         )
+
         if supplied != WEBHOOK_SECRET:
             return "Unauthorized", 401
 
     update = request.get_json(silent=True) or {}
 
-    message = update.get("message")
+    message = (
+        update.get("message")
+        or update.get("channel_post")
+    )
+
     if message:
-        chat_id = message["chat"]["id"]
-        text = message.get("text", "").strip()
-
-        if text in ["/start", "/menu"]:
-            send_message(
-                chat_id,
-                "🍔 BURGER CENTRE\n"
-                "━━━━━━━━━━━━━━━━━━\n\n"
-                "Welcome to your resource hub.\n"
-                "Choose a category below to explore useful links.",
-                main_menu()
-            )
-
-        elif text == "/help":
-            send_message(
-                chat_id,
-                "🍔 BURGER CENTRE HELP\n\n"
-                "Use /start to open the main menu.\n"
-                "Tap a category to see its resources."
-            )
+        handle_command(message)
 
     callback = update.get("callback_query")
+
     if callback:
-        answer_callback(callback["id"])
-        data = callback.get("data", "")
-        message = callback.get("message", {})
-        chat_id = message.get("chat", {}).get("id")
-        message_id = message.get("message_id")
-
-        if chat_id and message_id:
-            if data == "home":
-                edit_message(
-                    chat_id,
-                    message_id,
-                    "🍔 BURGER CENTRE\n"
-                    "━━━━━━━━━━━━━━━━━━\n\n"
-                    "Choose a resource category:",
-                    main_menu()
-                )
-
-            elif data == "about":
-                edit_message(
-                    chat_id,
-                    message_id,
-                    "🍔 ABOUT BURGER CENTRE\n\n"
-                    "A collection of useful public search "
-                    "engines, directories, research tools, "
-                    "and educational resources.\n\n"
-                    "Use resources responsibly and respect "
-                    "privacy and applicable laws.",
-                    [[{
-                        "text": "⬅️ Back to Main Menu",
-                        "callback_data": "home"
-                    }]]
-                )
-
-            elif data.startswith("category:"):
-                key = data.split(":", 1)[1]
-                if key in CATEGORIES:
-                    edit_message(
-                        chat_id,
-                        message_id,
-                        f"🍔 BURGER CENTRE\n"
-                        f"━━━━━━━━━━━━━━━━━━\n\n"
-                        f"{CATEGORIES[key]['name']}\n\n"
-                        "Choose a resource:",
-                        category_menu(key)
-                    )
+        handle_callback(callback)
 
     return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))
+    app.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 5000))
+    )

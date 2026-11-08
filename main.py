@@ -80,21 +80,15 @@ CATEGORIES = {
         ]
     },
     "records": {
-        "name": "📂 Public Records",
+        "name": "📩 2TT Mailer",
         "links": [
-            ("PACER", "https://pacer.uscourts.gov/"),
-            ("USA.gov", "https://www.usa.gov/"),
-            ("SEC EDGAR", "https://www.sec.gov/edgar"),
-            ("National Archives", "https://www.archives.gov/")
+            ("2TT Mailer", "https://t.me/Mailer2TT_bot")
         ]
     },
     "financial": {
-        "name": "💳 Financial Resources",
+        "name": "🤖 TwoTT Bot",
         "links": [
-            ("Annual Credit Report", "https://www.annualcreditreport.com/"),
-            ("CFPB", "https://www.consumerfinance.gov/"),
-            ("Federal Reserve", "https://www.federalreserve.gov/"),
-            ("FDIC BankFind", "https://banks.data.fdic.gov/bankfind-suite/")
+            ("TwoTT Bot", "https://t.me/TwoTT_bot")
         ]
     },
     "tools": {
@@ -233,15 +227,16 @@ def category_menu(key):
 
 def welcome_text():
     return (
-        "🍔 BURGER CENTRE\n"
+        "🛸 BURGER CENTRE\n"
         "━━━━━━━━━━━━━━━━━━\n\n"
-        "Your central resource directory.\n\n"
-        "Explore organized collections of "
-        "search engines, public resources, "
-        "business directories, research tools "
-        "and educational references.\n\n"
-        "Select a category below to get started.\n\n"
+        "You made it to Burger Centre.\n\n"
+        "Your portal to the other side of the internet.\n\n"
+        "Explore bots, search engines, online tools, "
+        "directories, email resources, research "
+        "platforms and digital discoveries.\n\n"
+        "Choose a department below to explore.\n\n"
         "━━━━━━━━━━━━━━━━━━\n"
+        "🧪 Explore the unknown.\n"
         "BURGER CENTRE © 2026"
     )
 
@@ -262,7 +257,7 @@ def handle_command(message):
     elif command == "/help":
         send_message(
             chat_id,
-            "🍔 BURGER CENTRE HELP\n\n"
+            "🛸 BURGER CENTRE HELP\n\n"
             "/start — Open the welcome menu\n"
             "/menu — Open the resource directory\n"
             "/help — Display these instructions\n\n"
@@ -294,14 +289,14 @@ def handle_callback(callback):
         edit_message(
             chat_id,
             message_id,
-            "🍔 ABOUT BURGER CENTRE\n"
+            "🛸 ABOUT BURGER CENTRE\n"
             "━━━━━━━━━━━━━━━━━━\n\n"
-            "Burger Centre is an organized "
-            "directory of useful online resources, "
-            "public information, search platforms, "
-            "research tools and educational websites.\n\n"
-            "Use resources responsibly and respect "
-            "privacy and applicable laws.",
+            "Burger Centre is a digital resource "
+            "directory featuring useful online tools, "
+            "bots, search platforms, public resources "
+            "and educational references.\n\n"
+            "Explore responsibly and respect privacy "
+            "and applicable laws.",
             [[{
                 "text": "⬅️ Back to Main Menu",
                 "callback_data": "home"
@@ -315,7 +310,7 @@ def handle_callback(callback):
             "❓ HOW TO USE BURGER CENTRE\n\n"
             "1. Select a category.\n"
             "2. Browse the available resources.\n"
-            "3. Tap a link to open its website.\n"
+            "3. Tap a link to open it.\n"
             "4. Return to the main menu whenever needed.",
             [[{
                 "text": "⬅️ Back to Main Menu",
@@ -330,7 +325,7 @@ def handle_callback(callback):
             edit_message(
                 chat_id,
                 message_id,
-                "🍔 BURGER CENTRE\n"
+                "🧪 BURGER CENTRE\n"
                 "━━━━━━━━━━━━━━━━━━\n\n"
                 f"{CATEGORIES[key]['name']}\n\n"
                 "Select a resource below:",

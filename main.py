@@ -11,8 +11,10 @@ logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET")
+ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
 
 BASE_URL = f"https://api.telegram.org/bot{BOT_TOKEN}"
+
 
 CATEGORIES = {
     "people": {
@@ -120,6 +122,10 @@ CATEGORIES = {
 }
 
 
+# Temporary conversation states for support requests.
+user_states = {}
+
+
 def telegram(method, payload):
     if not BOT_TOKEN:
         logger.error("BOT_TOKEN is missing.")
@@ -191,6 +197,20 @@ def main_menu():
 
     buttons.append([
         {
+            "text": "📩 Questions & Concerns",
+            "callback_data": "support"
+        }
+    ])
+
+    buttons.append([
+        {
+            "text": "⚠️ Report an Error",
+            "callback_data": "support:error"
+        }
+    ])
+
+    buttons.append([
+        {
             "text": "ℹ️ About",
             "callback_data": "about"
         },
@@ -208,19 +228,15 @@ def category_menu(key):
     buttons = []
 
     for label, url in category["links"]:
-        buttons.append([
-            {
-                "text": f"🔗 {label}",
-                "url": url
-            }
-        ])
+        buttons.append([{
+            "text": f"🔗 {label}",
+            "url": url
+        }])
 
-    buttons.append([
-        {
-            "text": "⬅️ Back to Main Menu",
-            "callback_data": "home"
-        }
-    ])
+    buttons.append([{
+        "text": "⬅️ Back to Main Menu",
+        "callback_data": "home"
+    }])
 
     return buttons
 
@@ -241,13 +257,168 @@ def welcome_text():
     )
 
 
-def handle_command(message):
-    chat_id = message["chat"]["id"]
+def start_support(chat_id, support_type):
+    if support_type == "error":
+        label = "ERROR REPORT"
+    elif support_type == "concern":
+        label = "CONCERN"
+    else:
+        label = "QUESTION"
+
+    user_states[chat_id] = {
+        "type": label
+    }
+
+    send_message(
+        chat_id,
+        "🛸 BURGER CENTRE // SUPPORT\n\n"
+        f"Selected: {label}\n\n"
+        "Please type your message below.\n\n"
+        "For error reports, include what happened, "
+        "which feature is affected, and any error "
+        "message you received.\n\n"
+        "An admin will review your submission.\n\n"
+        "Send /cancel to cancel."
+    )
+
+
+def handle_support_message(message):
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
     text = message.get("text", "").strip()
 
-    command = text.split()[0].split("@")[0] if text else ""
+    if not chat_id or not text:
+        return
+
+    if text == "/cancel":
+        user_states.pop(chat_id, None)
+        send_message(chat_id, "Your submission has been cancelled.")
+        return
+
+    state = user_states.get(chat_id)
+
+    if not state:
+        return
+
+    if not ADMIN_CHAT_ID:
+        send_message(
+            chat_id,
+            "⚠️ The support desk is being configured. "
+            "Please try again shortly."
+        )
+        return
+
+    user = message.get("from", {})
+    username = user.get("username")
+    first_name = user.get("first_name", "Telegram user")
+
+    user_label = f"@{username}" if username else first_name
+
+    admin_text = (
+        "🛸 BURGER CENTRE // NEW SUBMISSION\n"
+        "━━━━━━━━━━━━━━━━━━\n\n"
+        f"Type: {state['type']}\n"
+        f"From: {user_label}\n"
+        f"User ID: {chat_id}\n\n"
+        "MESSAGE:\n"
+        f"{text}\n\n"
+        f"BC_USER_ID:{chat_id}\n"
+        "━━━━━━━━━━━━━━━━━━\n"
+        "Reply directly to this message to respond."
+    )
+
+    result = send_message(ADMIN_CHAT_ID, admin_text)
+
+    if result and result.get("ok"):
+        user_states.pop(chat_id, None)
+        send_message(
+            chat_id,
+            "📡 TRANSMISSION RECEIVED\n\n"
+            "Your submission has been delivered to "
+            "the Burger Centre Admin Desk.\n\n"
+            "An admin will respond when available.\n\n"
+            "〘 ACCESS GRANTED 〙"
+        )
+    else:
+        send_message(
+            chat_id,
+            "⚠️ Your submission could not be delivered. "
+            "Please try again later."
+        )
+
+
+def handle_admin_reply(message):
+    if not ADMIN_CHAT_ID:
+        return
+
+    chat_id = message.get("chat", {}).get("id")
+
+    if str(chat_id) != str(ADMIN_CHAT_ID):
+        return
+
+    reply = message.get("reply_to_message")
+
+    if not reply:
+        return
+
+    original_text = reply.get("text", "")
+    marker = "BC_USER_ID:"
+
+    if marker not in original_text:
+        return
+
+    try:
+        target_id = original_text.split(marker, 1)[1].split()[0]
+        target_id = int(target_id)
+    except (ValueError, IndexError):
+        return
+
+    response_text = message.get("text", "").strip()
+
+    if not response_text:
+        return
+
+    result = send_message(
+        target_id,
+        "👽 BURGER CENTRE // ADMIN RESPONSE\n\n"
+        f"{response_text}\n\n"
+        "〘 TRANSMISSION COMPLETE 〙"
+    )
+
+    if result and result.get("ok"):
+        send_message(chat_id, "📡 Response delivered.")
+    else:
+        send_message(
+            chat_id,
+            "⚠️ Could not deliver the response."
+        )
+
+
+def handle_command(message):
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
+    text = message.get("text", "").strip()
+
+    if not chat_id or not text:
+        return
+
+    command = text.split()[0].split("@")[0]
+
+    # Run this command inside the private Admin Desk group.
+    if command == "/getid":
+        send_message(
+            chat_id,
+            f"🛸 ADMIN DESK GROUP ID:\n{chat_id}"
+        )
+        return
+
+    # Admin replies to a member's submission.
+    if chat.get("type") in ["group", "supergroup"]:
+        handle_admin_reply(message)
+        return
 
     if command in ["/start", "/menu"]:
+        user_states.pop(chat_id, None)
         send_message(
             chat_id,
             welcome_text(),
@@ -260,9 +431,15 @@ def handle_command(message):
             "🛸 BURGER CENTRE HELP\n\n"
             "/start — Open the welcome menu\n"
             "/menu — Open the resource directory\n"
-            "/help — Display these instructions\n\n"
-            "Select a category to explore its resources."
+            "/help — Display these instructions\n"
+            "/cancel — Cancel a support submission\n\n"
+            "Use the support buttons for questions, "
+            "concerns, or error reports."
         )
+
+    elif command == "/cancel":
+        user_states.pop(chat_id, None)
+        send_message(chat_id, "Submission cancelled.")
 
 
 def handle_callback(callback):
@@ -271,10 +448,20 @@ def handle_callback(callback):
     data = callback.get("data", "")
     message = callback.get("message", {})
 
-    chat_id = message.get("chat", {}).get("id")
+    chat = message.get("chat", {})
+    chat_id = chat.get("id")
     message_id = message.get("message_id")
 
     if not chat_id or not message_id:
+        return
+
+    # Support requests are accepted through private bot chats.
+    if chat.get("type") != "private":
+        send_message(
+            chat_id,
+            "Please open the Burger Centre bot privately "
+            "to submit a support request."
+        )
         return
 
     if data == "home":
@@ -284,6 +471,12 @@ def handle_callback(callback):
             welcome_text(),
             main_menu()
         )
+
+    elif data == "support":
+        start_support(chat_id, "question")
+
+    elif data == "support:error":
+        start_support(chat_id, "error")
 
     elif data == "about":
         edit_message(
@@ -311,7 +504,7 @@ def handle_callback(callback):
             "1. Select a category.\n"
             "2. Browse the available resources.\n"
             "3. Tap a link to open it.\n"
-            "4. Return to the main menu whenever needed.",
+            "4. Use the support buttons for assistance.",
             [[{
                 "text": "⬅️ Back to Main Menu",
                 "callback_data": "home"
@@ -351,13 +544,21 @@ def webhook():
 
     update = request.get_json(silent=True) or {}
 
-    message = (
-        update.get("message")
-        or update.get("channel_post")
-    )
+    message = update.get("message")
 
     if message:
-        handle_command(message)
+        chat_type = message.get("chat", {}).get("type")
+
+        if chat_type == "private":
+            text = message.get("text", "").strip()
+
+            if text.startswith("/"):
+                handle_command(message)
+            else:
+                handle_support_message(message)
+
+        else:
+            handle_command(message)
 
     callback = update.get("callback_query")
 
